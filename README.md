@@ -83,7 +83,6 @@ Edit `.env`:
 | `OPENAI_MODEL` | e.g. `openai/gpt-4o-mini` |
 | `REQUIRE_HUMAN_REVIEW` | `true` pauses after AI steps for human approval |
 
-> **Never commit `.env`** — it is listed in `.gitignore`.
 
 ### 3. Run with Docker (recommended)
 
@@ -195,8 +194,3 @@ git remote add origin https://github.com/YOUR_USERNAME/Automated-Book-Generation
 git push -u origin main
 ```
 
-Create an empty repository on GitHub first, then replace the remote URL.
-
-## License
-
-MIT (or your choice — update this section as needed.)
