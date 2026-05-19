@@ -124,6 +124,7 @@ Base path: `/api/v1`
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/books` | Create book + outline (alternative flow) |
+| GET | `/books` | List all books (newest first) |
 | GET | `/books/{book_id}` | Get book |
 | PATCH | `/books/{book_id}/outline` | Approve / add notes on outline |
 | PATCH | `/books/{book_id}/final-review` | Clear final review for compile |
@@ -194,3 +195,59 @@ git remote add origin https://github.com/YOUR_USERNAME/Automated-Book-Generation
 git push -u origin main
 ```
 
+Create an empty repository on GitHub first, then replace the remote URL.
+
+## Push to Docker Hub
+
+### 1. Log in (one time)
+
+Create a **Personal Access Token** at [Docker Hub → Security](https://hub.docker.com/settings/security), then:
+
+```bash
+echo "YOUR_DOCKER_HUB_TOKEN" | docker login -u askhan963 --password-stdin
+```
+
+If you see `pass not initialized`, remove the broken credential helper (one time):
+
+```bash
+# Credentials will be stored in ~/.docker/config.json instead
+python3 -c "import json, pathlib; p=pathlib.Path.home()/'.docker/config.json'; c=json.loads(p.read_text()); c.pop('credsStore',None); p.write_text(json.dumps(c,indent=2))"
+```
+
+Then run `docker login` again with the token command above.
+
+### 2. Build and push
+
+```bash
+chmod +x docker-publish.sh
+export DOCKERHUB_USER=your-dockerhub-username
+./docker-publish.sh
+```
+
+Optional version tag:
+
+```bash
+IMAGE_TAG=v1.0.0 ./docker-publish.sh
+```
+
+This publishes `your-dockerhub-username/automated-book-generation-system:latest`.
+
+### 3. Run the image from Docker Hub
+
+```bash
+docker pull your-dockerhub-username/automated-book-generation-system:latest
+docker run -p 8000:8000 --env-file .env \
+  your-dockerhub-username/automated-book-generation-system:latest
+```
+
+API: http://localhost:8000/docs
+
+> **Note:** Do not bake `.env` into the image. Pass secrets at runtime with `--env-file` or `-e` flags.
+
+### Manual commands (without script)
+
+```bash
+export DOCKERHUB_USER=your-dockerhub-username
+docker build -t $DOCKERHUB_USER/automated-book-generation-system:latest .
+docker push $DOCKERHUB_USER/automated-book-generation-system:latest
+```

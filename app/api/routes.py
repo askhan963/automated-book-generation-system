@@ -68,6 +68,12 @@ def create_book_and_outline(payload: BookCreateRequest):
     return _book_response(updated)
 
 
+@router.get("/books", response_model=list[BookResponse])
+def list_books():
+    """Return all books, newest first."""
+    return [_book_response(book) for book in db_service.list_books()]
+
+
 @router.get("/books/{book_id}", response_model=BookResponse)
 def get_book(book_id: UUID):
     book = db_service.get_book(book_id)

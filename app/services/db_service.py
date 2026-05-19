@@ -64,6 +64,20 @@ def create_book(title: str, initial_notes: str | None = None) -> dict[str, Any]:
     return _run(_insert)
 
 
+def list_books() -> list[dict[str, Any]]:
+    def _fetch() -> list[dict[str, Any]]:
+        result = (
+            get_supabase()
+            .table("books")
+            .select("*")
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return result.data or []
+
+    return _run(_fetch)
+
+
 def get_book(book_id: UUID) -> dict[str, Any] | None:
     def _fetch() -> dict[str, Any] | None:
         result = (
