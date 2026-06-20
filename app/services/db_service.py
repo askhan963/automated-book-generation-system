@@ -48,13 +48,17 @@ def check_supabase_health() -> tuple[str, str | None]:
 
 # --- Books ---
 
-def create_book(title: str, initial_notes: str | None = None) -> dict[str, Any]:
+def create_book(title: str, initial_notes: str | None = None, genre: str | None = None, tone: str | None = None, audience: str | None = None, length: str | None = None) -> dict[str, Any]:
     payload = {
         "title": title,
         "initial_notes": initial_notes,
         "outline_status": StageStatus.PENDING_REVIEW.value,
         "final_review_notes_status": StageStatus.PENDING_REVIEW.value,
         "phase": BookPhase.OUTLINE.value,
+        "genre": genre,
+        "tone": tone,
+        "audience": audience,
+        "length": length,
     }
 
     def _insert() -> dict[str, Any]:
@@ -112,6 +116,10 @@ def create_book_with_outline(
     notes: str | None,
     outline: OutlineData,
     outline_status: StageStatus = StageStatus.OUTLINE_REVIEW,
+    genre: str | None = None,
+    tone: str | None = None,
+    audience: str | None = None,
+    length: str | None = None,
 ) -> dict[str, Any]:
     payload = {
         "title": title,
@@ -120,6 +128,10 @@ def create_book_with_outline(
         "outline_status": outline_status.value,
         "final_review_notes_status": StageStatus.PENDING_REVIEW.value,
         "phase": BookPhase.OUTLINE.value,
+        "genre": genre,
+        "tone": tone,
+        "audience": audience,
+        "length": length,
     }
 
     def _insert() -> dict[str, Any]:
@@ -279,3 +291,80 @@ def get_next_outline_chapter(book: dict[str, Any]) -> OutlineChapterItem | None:
         if item.chapter_number not in existing:
             return item
     return None
+
+
+# --- Template Functions ---
+
+def create_template(template_data: dict[str, Any]) -> dict[str, Any]:
+    """Create a new outline template."""
+    def _insert() -> dict[str, Any]:
+        result = get_supabase().table("outline_templates").insert(template_data).execute()
+        return result.data[0]
+
+    return _run(_insert)
+
+
+def get_template(template_id: UUID) -> dict[str, Any] | None:
+    """Get a template by ID."""
+    def _fetch() -> dict[str, Any] | None:
+        result = (
+            get_supabase()
+            .table("outline_templates")
+            .select("*")
+            .eq("id", str(template_id))
+            .maybe_single()
+            .execute()
+        )
+        # Handle case where result might be None (no data found)
+        if result is None:
+            return None
+        return result.data
+
+    return _run(_fetch)
+
+
+def list_templates(category: str | None = None, public_only: bool = True) -> list[dict[str, Any]]:
+    """List templates with optional filtering."""
+    def _fetch() -> list[dict[str, Any]]:
+        query = get_supabase().table("outline_templates").select("*")
+
+        if category:
+            query = query.eq("category", category)
+
+        if public_only:
+            query = query.eq("is_public", True)
+
+        result = query.order("created_at", desc=True).execute()
+        return result.data or []
+
+    return _run(_fetch)
+
+
+def update_template(template_id: UUID, updates: dict[str, Any]) -> dict[str, Any] | None:
+    """Update a template by ID."""
+    def _update() -> dict[str, Any] | None:
+        result = (
+            get_supabase()
+            .table("outline_templates")
+            .update(updates)
+            .eq("id", str(template_id))
+            .execute()
+        )
+        return result.data[0] if result.data else None
+
+    return _run(_update)
+
+
+def delete_template(template_id: UUID) -> bool:
+    """Delete a template by ID."""
+    def _delete() -> bool:
+        result = (
+            get_supabase()
+            .table("outline_templates")
+            .delete()
+            .eq("id", str(template_id))
+            .execute()
+        )
+        return len(result.data) > 0
+
+    return _run(_delete)

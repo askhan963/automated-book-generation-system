@@ -31,12 +31,23 @@ BLOCKING_STATUSES = {
 def generate_outline(payload: GenerateOutlineRequest):
     """Generate an outline from title/notes and persist to Supabase."""
     try:
-        outline = ai_service.generate_outline(payload.title, payload.notes)
+        outline = ai_service.generate_outline(
+            title=payload.title,
+            initial_notes=payload.notes,
+            genre=payload.genre,
+            tone=payload.tone,
+            audience=payload.audience,
+            length=payload.length
+        )
         book = db_service.create_book_with_outline(
             title=payload.title,
             notes=payload.notes,
             outline=outline,
             outline_status=StageStatus.OUTLINE_REVIEW,
+            genre=payload.genre,
+            tone=payload.tone,
+            audience=payload.audience,
+            length=payload.length,
         )
         return BookResponse.model_validate(book)
     except HTTPException:
