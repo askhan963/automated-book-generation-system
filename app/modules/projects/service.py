@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from app.core.config import get_settings
 from app.services.db_service import _run, get_supabase
-from app.models import Role, UserResponse, ProjectResponse, ProjectCreateResponse
+from app.modules.auth.schemas import Role, UserResponse
 
 def _upsert_project(
     project_id: Optional[UUID],
@@ -108,3 +108,27 @@ def delete_project(project_id: UUID) -> None:
         )
         # Cascade delete of related api_keys, usage_quota automatically via foreign key
     _run(_delete)
+
+
+def create_api_key(
+    project_id: UUID,
+    raw_key: str,
+    expiration: datetime | None = None,
+) -> Dict[str, Any]:
+    from hashlib import sha256
+    key_hash = sha256(raw_key.encode()).hexdigest()
+    key_id = UUID()
+    def _insert() -> Dict[str, Any]:
+        result = (
+            get_supabase()
+            .table("api_keys")
+            .insert({
+                "project_id": str(project_id),
+                "key_hash": key_hash,
+                "expires_at": expiration.isoformat() if expiration else None,
+                "revoked": False,
+            })
+            .execute()
+        )
+        return result.data[0]
+    return _run(_insert)

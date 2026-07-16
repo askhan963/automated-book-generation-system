@@ -1,21 +1,33 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends, Path, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, status
 from typing import List, Optional
+from uuid import UUID
 
 from pydantic import Field
 
-from app.models import (
+from app.modules.projects.schemas import (
     ProjectCreateResponse,
     ProjectResponse,
     ProjectUpdateRequest,
     ApiKeyCreateResponse,
     ApiKeyItemResponse,
     ApiKeyListResponse,
-    ApiKeyRevokeResponse,
 )
-from app.services import project_service, user_service
+from app.modules.projects.service import (
+    create_project,
+    get_project,
+    list_projects_by_user,
+    update_project,
+    delete_project,
+    create_api_key,
+)
+from app.modules.auth.service import (
+    get_current_user,
+    get_project_id_by_api_key,
+    ACCESS_EXPIRE_MINUTES,
+)
 
-router = APIRouter(prefix="/projects", tags=["projects"])
+router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
 # ----------------------------------------------------------------------
 # Dependency: verify current user (JWT or API-key based)
@@ -33,11 +45,11 @@ async def get_current_user_or_project(
     """
     # 1️⃣ JWT path
     if auth and auth.startswith("Bearer "):
-        user = await user_service.get_current_user(auth.split(" ", 1)[1])
+        user = await get_current_user(auth.split(" ", 1)[1])
         return {"identity": "user", "user": user}
     # 2️⃣ API‑key path
     if api_key:
-        project_id = user_service.get_project_id_by_api_key(api_key)
+        project_id = get_project_id_by_api_key(api_key)
         if project_id:
             return {"identity": "project-key", "project_id": project_id}
         raise HTTPException(status_code=401, detail="Invalid API key")
@@ -56,7 +68,7 @@ async def require_owner(
     - Admins can act on any project.
     - Normal users can act only on projects they own.
     """
-    proj = await project_service.get_project(project_id)
+    proj = await get_project(project_id)
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
     # If caller is a normal user (not an admin) verify ownership
@@ -75,7 +87,7 @@ async def require_owner(
     status_code=status.HTTP_201_CREATED,
     summary="Create a project for the authenticated user",
 )
-async def create_project(
+async def create_project_endpoint(
     payload: ProjectCreateResponse,
     user_proj: dict = Depends(get_current_user_or_project),
 ):
@@ -89,7 +101,7 @@ async def create_project(
         raise HTTPException(status_code=403, detail="Only users can create projects")
 
     user = user_proj["user"]
-    new_proj = project_service.create_project(
+    new_proj = create_project(
         name=payload.name,
         description=payload.description,
         owner_id=user.id,
@@ -105,11 +117,11 @@ async def create_project(
     response_model=ProjectResponse,
     summary="Get a project by its UUID",
 )
-async def get_project(
+async def get_project_endpoint(
     proj_id: UUID = Path(..., description="Project UUID"),
     proj: dict = Depends(require_owner),
 ):
-    return await project_service.get_project(proj_id)
+    return await get_project(proj_id)
 
 
 # ----------------------------------------------------------------------
@@ -120,12 +132,12 @@ async def get_project(
     response_model=ProjectResponse,
     summary="Update name/description of a project you own",
 )
-async def update_project(
+async def update_project_endpoint(
     payload: ProjectUpdateRequest,
     proj_id: UUID = Path(..., description="Project UUID"),
     proj: dict = Depends(require_owner),
 ):
-    return await project_service.update_project(
+    return await update_project(
         project_id=proj_id,
         name=payload.name,
         description=payload.description,
@@ -140,11 +152,11 @@ async def update_project(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a project (and its API keys, quota rows, etc.)",
 )
-async def delete_project(
+async def delete_project_endpoint(
     proj_id: UUID = Path(..., description="Project UUID"),
     proj: dict = Depends(require_owner),
 ):
-    await project_service.delete_project(proj_id)
+    await delete_project(proj_id)
     return None
 
 
@@ -159,7 +171,7 @@ async def delete_project(
     },
     summary="Generate a new API key for the project",
 )
-async def create_api_key(
+async def create_api_key_endpoint(
     proj_id: UUID = Path(..., description="Project UUID"),
     user_proj: dict = Depends(get_current_user_or_project),
 ):
@@ -168,11 +180,11 @@ async def create_api_key(
     **raw** key to the caller (shown only once).  The key is tied to the
     originating project and can be revoked later.
     """
-    # Create a new secret (e.g., 32-byte base64)
+    # Create a random secret (32-byte base64)
     import secrets
     raw = secrets.token_urlsafe(32)
     expires_at = None  # No expiration by default; caller can request one
-    key_info = project_service.create_api_key(
+    key_info = create_api_key(
         project_id=proj_id,
         raw_key=raw,
         expiration=expires_at,
@@ -185,10 +197,11 @@ async def create_api_key(
     response_model=ApiKeyListResponse,
     summary="List API keys belonging to this project",
 )
-async def list_api_keys(
+async def list_api_keys_endpoint(
     proj_id: UUID = Path(..., description="Project UUID"),
     user_proj: dict = Depends(require_owner),
 ):
+    from app.services.db_service import _run, get_supabase
     def _fetch():
         result = (
             get_supabase()
@@ -211,7 +224,7 @@ async def list_api_keys(
     },
     summary="Revoke or update an existing API key",
 )
-async def manage_api_key(
+async def manage_api_key_endpoint(
     proj_id: UUID = Path(..., description="Project UUID"),
     key_id: UUID = Path(..., description="API key UUID"),
     revoke: bool = Query(False, description="True → mark revoked; False → set new expiration"),
@@ -247,14 +260,15 @@ async def manage_api_key(
 
 @router.delete(
     "/{proj_id}/keys/{key_id}",
-    response_class=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete an API key permanently",
 )
-async def delete_api_key(
+async def delete_api_key_endpoint(
     proj_id: UUID = Path(...),
     key_id: UUID = Path(...),
     user_proj: dict = Depends(get_current_user_or_project),
 ):
+    from app.services.db_service import _run, get_supabase
     def _delete():
         result = (
             get_supabase()

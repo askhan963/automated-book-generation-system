@@ -1,15 +1,20 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer
 
-from app.api.generation import router as generation_router
-from app.api.routes import router
-from app.api.webhooks import router as webhooks_router
-from app.api.templates import router as templates_router
+from app.modules.auth.router import router as auth_router
+from app.modules.books.router import router as books_router
+from app.modules.projects.router import router as projects_router
+from app.modules.webhooks.router import router as webhooks_router
+from app.modules.templates.router import router as templates_router
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 app = FastAPI(
     title="Automated Book Generation System",
     description="Generate book outlines and chapters with human-in-the-loop gating.",
     version="1.0.0",
+    dependencies=[Depends(oauth2_scheme)],
 )
 
 app.add_middleware(
@@ -20,8 +25,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router)
-app.include_router(generation_router)
+app.include_router(auth_router)
+app.include_router(books_router)
+app.include_router(projects_router)
 app.include_router(webhooks_router)
 app.include_router(templates_router)
 
