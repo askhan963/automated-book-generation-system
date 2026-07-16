@@ -12,6 +12,9 @@ Test interactively via **Swagger UI** at `/docs` or with Postman/curl.
 - **Final review gate** before downloadable compilation
 - **Health check** with Supabase and OpenRouter connectivity status
 - **Docker** support for local deployment
+- **Project management** (create projects, manage API keys)
+- **Template management** (create, list, update, delete templates)
+- **Webhooks** for outline approval and chapter completion events
 
 ## Tech Stack
 
@@ -21,22 +24,28 @@ Test interactively via **Swagger UI** at `/docs` or with Postman/curl.
 | Database | Supabase (PostgreSQL + PostgREST) |
 | LLM | OpenRouter via `openai` Python SDK |
 | Config | Pydantic Settings |
+| Authentication | JWT (access/refresh tokens) |
+| API Keys | Project-based API keys with revocation/expiration |
 
 ## Project Structure
 
 ```
 ├── app/
-│   ├── main.py              # FastAPI entry point
-│   ├── models.py            # Pydantic schemas & enums
-│   ├── api/
-│   │   ├── routes.py        # Books, chapters, compile, health
-│   │   └── generation.py    # generate-outline, generate-chapter
+│   ├── main.py              # FastAPI entry point, router registration
+│   ├── models.py            # Pydantic schemas (BookResponse, ChapterResponse, StageStatus, BookPhase)
+│   ├── modules/
+│   │   ├── auth/            # Authentication (login, register, refresh)
+│   │   ├── books/           # Book and chapter operations (CRUD, generation, human-in-the-loop)
+│   │   ├── projects/        # Project and API key management
+│   │   ├── templates/       # Template management
+│   │   ├── webhooks/        # Outline approved and chapter completed webhooks
+│   │   └── generation/      # Outline and chapter generation services
 │   ├── core/
 │   │   └── config.py        # Environment settings
 │   └── services/
-│       ├── ai_service.py    # LLM: outline, chapter, summarize
-│       ├── db_service.py    # Supabase CRUD
-│       └── supabase_errors.py
+│       ├── ai_service.py    # LLM: outline, chapter, summarization
+│       ├── db_service.py    # Supabase client wrappers
+│       └── supabase_errors.py  # Error handling
 ├── sql/
 │   ├── schema.sql           # Full database schema
 │   ├── rls_policies.sql     # Row-level security for anon key
@@ -44,6 +53,7 @@ Test interactively via **Swagger UI** at `/docs` or with Postman/curl.
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
+├── contract-api.md          # Detailed API contract reference
 └── .env.example
 ```
 
@@ -60,9 +70,7 @@ Test interactively via **Swagger UI** at `/docs` or with Postman/curl.
 In the Supabase **SQL Editor**, run in order:
 
 1. `sql/schema.sql` — creates `books` and `chapters` tables  
-2. `sql/migration_add_outline_review.sql` — if upgrading an older DB  
-3. `sql/migration_add_final_review_status.sql` — if upgrading an older DB  
-4. `sql/rls_policies.sql` — **required** if using the `anon` API key  
+2. `sql/rls_policies.sql` — **required** if using the `anon` API key  
 
 Confirm tables appear under **Table Editor**.
 
@@ -83,7 +91,6 @@ Edit `.env`:
 | `OPENAI_MODEL` | e.g. `openai/gpt-4o-mini` |
 | `REQUIRE_HUMAN_REVIEW` | `true` pauses after AI steps for human approval |
 
-
 ### 3. Run with Docker (recommended)
 
 ```bash
@@ -102,85 +109,91 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-## API Endpoints
+## API Documentation
+
+For a complete, detailed reference of all endpoints, request/response formats, and error codes, see [`contract-api.md`](contract-api.md).
+
+### Quick Overview
 
 Base path: `/api/v1`
 
-### Health
+#### Authentication
+- `POST /auth/login` – Obtain access and refresh tokens
+- `POST /auth/register` – Register a new user
+- `POST /auth/refresh` – Refresh access token
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | App, Supabase, and OpenRouter status |
+#### Books & Chapters
+- `POST /books` – Create a new book and generate outline
+- `GET /books` – List all books (newest first)
+- `GET /books/{book_id}` – Get a specific book
+- `PATCH /books/{book_id}/outline` – Update outline notes and status (human-in-the-loop)
+- `PATCH /books/{book_id}/final-review` – Update final review status (required for compile)
+- `POST /books/{book_id}/chapters/next` – Generate next chapter using prior summaries
+- `GET /books/{book_id}/chapters` – List chapters for a book
+- `PATCH /chapters/{chapter_id}` – Update chapter notes and status (human-in-the-loop)
+- `POST /chapters/{chapter_id}/regenerate` – Regenerate chapter with notes
+- `POST /books/{book_id}/chapters/{chapter_id}/moderate` – Moderate chapter content
+- `GET /books/{book_id}/draft` – Export full book draft as JSON
+- `GET /books/{book_id}/compile` – Download compiled book as `.txt` (requires final review cleared)
 
-### Generation
+#### Export
+- `GET /books/{book_id}/export/pdf` – Get URL for PDF export
+- `GET /books/{book_id}/export/epub` – Get URL for EPUB export
+- `GET /books/{book_id}/export/markdown` – Get URL for Markdown export
+- `GET /books/{book_id}/export/html` – Get URL for HTML export
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/generate-outline` | Generate outline; save book with `outline_review` |
-| POST | `/generate-chapter` | Generate chapter + summary (requires approved chapter row) |
+#### Projects
+- `POST /projects/` – Create a new project
+- `GET /projects/{proj_id}` – Get a project
+- `PATCH /projects/{proj_id}` – Update project
+- `DELETE /projects/{proj_id}` – Delete project
+- `POST /projects/{proj_id}/keys` – Generate API key for
+- `POST /projects/{proj_id}/keys` – Generate a new API key for the project
+- `GET /projects/{proj_id}/keys` – List API keys for the project
+- `PATCH /projects/{proj_id}/keys/{key_id}` – Revoke or update an API key
+- `DELETE /projects/{proj_id}/keys/{key_id}` – Delete an API key
 
-### Books & chapters
+#### Templates
+- `POST /templates/` – Create a new template
+- `GET /templates/` – List templates (with optional filters)
+- `GET /templates/{template_id}` – Get a specific template
+- `PATCH /templates/{template_id}` – Update a template
+- `DELETE /templates/{template_id}` – Delete a template
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/books` | Create book + outline (alternative flow) |
-| GET | `/books` | List all books (newest first) |
-| GET | `/books/{book_id}` | Get book |
-| PATCH | `/books/{book_id}/outline` | Approve / add notes on outline |
-| PATCH | `/books/{book_id}/final-review` | Clear final review for compile |
-| POST | `/books/{book_id}/chapters/next` | Create + generate next chapter |
-| GET | `/books/{book_id}/chapters` | List chapters |
-| PATCH | `/chapters/{chapter_id}` | Approve / add notes on chapter |
-| POST | `/chapters/{chapter_id}/regenerate` | Regenerate chapter with notes |
-| GET | `/books/{book_id}/draft` | JSON preview of full draft |
-| GET | `/books/{book_id}/compile` | Download `.txt` (requires final review cleared) |
+#### Webhooks
+- `POST /webhooks/outline-approved` – Send outline approved notifications
+- `POST /webhooks/chapter-completed` – Send chapter completed notifications
 
-Interactive docs: **http://localhost:8000/docs**
+#### Health & Stats
+- `GET /health` – Health check (Supabase, OpenRouter)
+- `GET /stats` – Get analytics dashboard statistics
 
-## End-to-end test flow
+## End-to-end Test Flow
 
-1. **Health** — `GET /api/v1/health` → both services `ok`
-2. **Outline** — `POST /api/v1/generate-outline` with `title` and `notes`
-3. **Approve outline** — `PATCH /api/v1/books/{id}/outline` → `"status": "approved"`
-4. **Chapter stubs** — Insert rows in Supabase `chapters` (one per outline chapter) with `"status": "approved"`, or use `POST /books/{id}/chapters/next`
-5. **Generate chapters** — `POST /api/v1/generate-chapter` with each `chapter_id`; PATCH to `approved` after review
-6. **Final review** — `PATCH /api/v1/books/{id}/final-review` → `"status": "no_notes_needed"`
-7. **Compile** — `GET /api/v1/books/{id}/compile` → downloads text file
+1. **Health** – `GET /api/v1/health` → both services `ok`
+2. **Outline** – `POST /api/v1/generate-outline` with `title` and `notes`
+3. **Approve outline** – `PATCH /api/v1/books/{id}/outline` → `"status": "approved"`
+4. **Chapter stubs** – Insert rows in Supabase `chapters` (one per outline chapter) with `"status": "approved"`, or use `POST /books/{id}/chapters/next`
+5. **Generate chapters** – `POST /api/v1/generate-chapter` with each `chapter_id`; PATCH to `approved` after review
+6. **Final review** – `PATCH /api/v1/books/{id}/final-review` → `"status": "no_notes_needed"`
+7. **Compile** – `GET /api/v1/books/{id}/compile` → downloads text file
 
-### Example: generate outline
-
-```bash
-curl -X POST http://localhost:8000/api/v1/generate-outline \
-  -H "Content-Type: application/json" \
-  -d '{"title": "The Last Lighthouse", "notes": "Mystery on a remote island."}'
-```
-
-### Example: clear final review and compile
-
-```bash
-curl -X PATCH "http://localhost:8000/api/v1/books/{BOOK_ID}/final-review" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "no_notes_needed", "human_notes": "Ready to publish."}'
-
-curl -O -J "http://localhost:8000/api/v1/books/{BOOK_ID}/compile"
-```
-
-## Status gates (human-in-the-loop)
+## Status Gates (Human-in-the-Loop)
 
 | Field | Values | Purpose |
 |-------|--------|---------|
-| `books.outline_status` | `outline_review`, `pending_review`, `approved`, `no_notes_needed`, … | Outline approval |
-| `chapters.status` | `pending_review`, `approved`, `no_notes_needed`, … | Chapter generation gate |
-| `books.final_review_notes_status` | Must be `no_notes_needed` for `/compile` | Final publish gate |
+| `books.outline_status` | `draft`, `review`, `approved`, `rejected`, `no_notes_needed` | Outline approval |
+| `chapters.status` | `draft`, `review`, `approved`, `revision_requested`, `no_notes_needed` | Chapter generation gate |
+| `books.final_review_notes_status` | `no notes`, `notes pending`, `addressed` | Must be `no_notes_needed` for `/compile` |
 
-`POST /generate-chapter` only runs when the chapter row is `approved` or `no_notes_needed`. Otherwise it returns **409** — `Waiting for human review`.
+`POST /generate-chapter` only runs when the chapter row is `approved` or `no_notes_needed`. Otherwise returns **409** – `Waiting for human review`.
 
 ## Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
 | Health: Supabase error / table missing | Run `sql/schema.sql` |
-| 403 RLS on insert | Run `sql/rls_policies.sql` or use **service_role** key |
+| 403 RLS on insert | Run `sql/rls_policies.sql` or use `service_role` key |
 | 503 Cannot reach Supabase | Check `SUPABASE_URL`; restart Docker (`docker compose up --build -d`) |
 | 403 on compile | `PATCH .../final-review` with `no_notes_needed` |
 | OpenRouter auth errors | Verify `OPENAI_BASE_URL` and `OPENAI_MODEL` |
@@ -204,13 +217,12 @@ Create an empty repository on GitHub first, then replace the remote URL.
 Create a **Personal Access Token** at [Docker Hub → Security](https://hub.docker.com/settings/security), then:
 
 ```bash
-echo "YOUR_DOCKER_HUB_TOKEN" | docker login -u askhan963 --password-stdin
+echo "YOUR_DOCKER_HUB_TOKEN" | docker login -u YOUR_USERNAME --password-stdin
 ```
 
 If you see `pass not initialized`, remove the broken credential helper (one time):
 
 ```bash
-# Credentials will be stored in ~/.docker/config.json instead
 python3 -c "import json, pathlib; p=pathlib.Path.home()/'.docker/config.json'; c=json.loads(p.read_text()); c.pop('credsStore',None); p.write_text(json.dumps(c,indent=2))"
 ```
 
