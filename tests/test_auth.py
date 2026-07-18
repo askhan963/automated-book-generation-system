@@ -94,6 +94,8 @@ def test_create_access_token():
 
 
 def test_get_current_user_valid():
+    from app.modules.auth.dependencies import decode_via_token
+
     test_email = "user@example.com"
     test_uuid = uuid4()
     mock_user = {
@@ -105,22 +107,25 @@ def test_get_current_user_valid():
     }
     token = "fake.jwt.token"
 
-    with patch("app.modules.auth.service.decode_token") as mock_decode, \
-         patch("app.modules.auth.service.get_user_by_email") as mock_get_user:
+    with patch("app.modules.auth.dependencies.decode_token") as mock_decode, \
+         patch("app.modules.auth.dependencies.get_user_by_email") as mock_get_user:
         mock_decode.return_value = {"sub": test_email, "role": Role.USER.value}
         mock_get_user.return_value = mock_user
 
-        # The function is async, but we can call it directly in test for simplicity
         import asyncio
-        result = asyncio.run(auth_service.get_current_user(token))
+        result = asyncio.run(decode_via_token(token))
         assert isinstance(result, UserResponse)
         assert result.email == test_email
         assert result.id == test_uuid
 
 
 def test_get_current_user_invalid_token():
-    with patch("app.modules.auth.service.decode_token") as mock_decode:
-        mock_decode.side_effect = Exception("Invalid token")
+    from app.modules.auth.dependencies import decode_via_token
+    from fastapi import HTTPException
+    from jose import JWTError
+
+    with patch("app.modules.auth.dependencies.decode_token") as mock_decode:
+        mock_decode.side_effect = JWTError("Invalid token")
         import asyncio
-        with pytest.raises(Exception):  # In real code would raise HTTPException
-            asyncio.run(auth_service.get_current_user("bad.token"))
+        with pytest.raises(HTTPException):
+            asyncio.run(decode_via_token("bad.token"))

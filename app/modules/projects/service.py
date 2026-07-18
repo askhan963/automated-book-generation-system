@@ -116,8 +116,9 @@ def create_api_key(
     expiration: datetime | None = None,
 ) -> Dict[str, Any]:
     from hashlib import sha256
+
     key_hash = sha256(raw_key.encode()).hexdigest()
-    key_id = UUID()
+
     def _insert() -> Dict[str, Any]:
         result = (
             get_supabase()
@@ -131,4 +132,5 @@ def create_api_key(
             .execute()
         )
         return result.data[0]
+
     return _run(_insert)

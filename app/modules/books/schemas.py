@@ -87,6 +87,7 @@ class BookResponse(BaseModel):
     final_review_notes_status: StageStatus = StageStatus.PENDING_REVIEW
     phase: BookPhase
     human_notes: Optional[str]
+    owner_id: Optional[UUID] = None
     genre: Optional[str] = None
     tone: Optional[str] = None
     audience: Optional[str] = None

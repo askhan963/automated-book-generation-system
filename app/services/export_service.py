@@ -206,14 +206,15 @@ def compile_book_html(book_id: UUID) -> str:
 """
     return html
 
-def save_export_file(book_id: UUID, file_type: str, content: Any) -> None:
-    """Save export content to the static exports directory."""
-    import os, hashlib
-    export_dir = os.path.abspath('exports')
+def save_export_file(book_id: UUID, file_type: str, content: Any) -> str:
+    """Save export content to the static exports directory and return its URL path."""
+    import os
+
+    export_dir = os.path.abspath("exports")
     os.makedirs(export_dir, exist_ok=True)
     filename = f"{str(book_id)[:8]}.{file_type}"
     path = os.path.join(export_dir, filename)
-    mode = 'wb' if isinstance(content, (bytes, bytearray)) else 'w'
+    mode = "wb" if isinstance(content, (bytes, bytearray)) else "w"
     with open(path, mode) as f:
-        f.write(content if 'b' in mode else str(content))
+        f.write(content if "b" in mode else str(content))
     return f"/exports/{filename}"

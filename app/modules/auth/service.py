@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 import hashlib
 
 from passlib.context import CryptContext
@@ -8,8 +8,7 @@ from jose import JWTError, jwt
 
 from app.core.config import get_settings
 from app.services.db_service import _run, get_supabase
-from app.modules.auth.schemas import Role, UserResponse, TokenResponse
-from fastapi import Header, HTTPException
+from app.modules.auth.schemas import Role, UserResponse
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SECRET_KEY = get_settings().jwt_secret
@@ -49,13 +48,12 @@ def generate_api_key(raw: str, expiration: datetime | None = None):
     Returns a dict with keys: key_hash, key, key_id, expires_at, revoked.
     """
     key_hash = hashlib.sha256(raw.encode()).hexdigest()
-    key_id = UUID()
     return {
         "key_hash": key_hash,
         "key": raw,
-        "key_id": key_id,
+        "key_id": uuid4(),
         "expires_at": expiration,
-        "revoked": False
+        "revoked": False,
     }
 
 def hash_api_key(raw: str) -> str:
@@ -133,17 +131,29 @@ def check_quota_limit(project_id: UUID, max_tokens: int) -> bool:
 
 def get_project_by_api_key(raw_key: str):
     key_hash = hash_api_key(raw_key)
+
     def _fetch():
+        # Keys with NULL expires_at never expire; otherwise must be in the future
         result = (
             get_supabase()
             .table("api_keys")
-            .select("project_id")
+            .select("project_id, expires_at")
             .eq("key_hash", key_hash)
             .eq("revoked", False)
-            .gte("expires_at", datetime.utcnow())
             .execute()
         )
-        return result.data[0] if result.data else None
+        rows = result.data or []
+        now = datetime.utcnow()
+        for row in rows:
+            expires_at = row.get("expires_at")
+            if expires_at is None:
+                return row
+            if isinstance(expires_at, str):
+                expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00")).replace(tzinfo=None)
+            if expires_at > now:
+                return row
+        return None
+
     return _run(_fetch)
 
 def get_project_id_by_api_key(raw_key: str):
@@ -153,19 +163,7 @@ def get_project_id_by_api_key(raw_key: str):
     return None
 
 # ---------- Service Functions ----------
-
-async def get_current_user(token: str) -> UserResponse:
-    try:
-        payload = decode_token(token)
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid authentication token")
-    email = payload.get("sub")
-    if email is None:
-        raise HTTPException(status_code=401, detail="Invalid authentication token")
-    user = get_user_by_email(email)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    return UserResponse.from_dict(user)
+# get_current_user lives in app.modules.auth.dependencies (FastAPI Depends wiring)
 
 
 def create_user(email: str, plain_password: str) -> dict[str, Any]:

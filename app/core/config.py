@@ -17,6 +17,7 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return value.strip()
         return value
+
     openai_api_key: str
     openai_base_url: str | None = "https://openrouter.ai/api/v1"
     openai_model: str = "openai/gpt-4o-mini"
@@ -25,10 +26,22 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_expires_minutes: int = 30
 
+    # Comma-separated SPA origins, or * for local development
+    cors_origins: list[str] = ["*"]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value):
+        if value is None or value == "":
+            return ["*"]
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
     # Slack webhook URL for notifications
     slack_webhook_url: Optional[str] = None
 
-    # CI/CD webhook URL for notifications (GitHub Actions, GitLab CI, Jenkins, etc.)
+    # CI/CD webhook URL for notifications
     cicd_webhook_url: Optional[str] = None
 
     # When true, outline/chapters pause at pending_review for human approval

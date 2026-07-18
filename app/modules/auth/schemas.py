@@ -1,11 +1,18 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from uuid import UUID
 from datetime import datetime
 from enum import Enum
 
+
 class Role(str, Enum):
     USER = "user"
     ADMIN = "admin"
+
+
+class UserRegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+
 
 class UserResponse(BaseModel):
     id: UUID
@@ -16,8 +23,10 @@ class UserResponse(BaseModel):
 
     @classmethod
     def from_dict(cls, d: dict) -> "UserResponse":
-        d["role"] = Role(d["role"])
-        return cls(**d)
+        data = dict(d)
+        data["role"] = Role(data["role"])
+        return cls(**data)
+
 
 class TokenResponse(BaseModel):
     access_token: str

@@ -48,6 +48,7 @@ def create_book(
     tone: Optional[str] = None,
     audience: Optional[str] = None,
     length: Optional[str] = None,
+    owner_id: Optional[UUID] = None,
 ) -> dict[str, Any]:
     """Create a new book record."""
     payload = {
@@ -61,6 +62,8 @@ def create_book(
         "audience": audience,
         "length": length,
     }
+    if owner_id is not None:
+        payload["owner_id"] = str(owner_id)
 
     def _insert() -> dict[str, Any]:
         result = get_supabase().table("books").insert(payload).execute()
@@ -69,16 +72,13 @@ def create_book(
     return _run(_insert)
 
 
-def list_books() -> List[dict[str, Any]]:
-    """List all books ordered by creation date (newest first)."""
+def list_books(owner_id: Optional[UUID] = None) -> List[dict[str, Any]]:
+    """List books ordered by creation date (newest first). Optionally filter by owner."""
     def _fetch() -> List[dict[str, Any]]:
-        result = (
-            get_supabase()
-            .table("books")
-            .select("*")
-            .order("created_at", desc=True)
-            .execute()
-        )
+        query = get_supabase().table("books").select("*")
+        if owner_id is not None:
+            query = query.eq("owner_id", str(owner_id))
+        result = query.order("created_at", desc=True).execute()
         return result.data or []
 
     return _run(_fetch)
@@ -124,6 +124,7 @@ def create_book_with_outline(
     tone: Optional[str] = None,
     audience: Optional[str] = None,
     length: Optional[str] = None,
+    owner_id: Optional[UUID] = None,
 ) -> dict[str, Any]:
     """Create a book with an initial outline."""
     payload = {
@@ -138,6 +139,8 @@ def create_book_with_outline(
         "audience": audience,
         "length": length,
     }
+    if owner_id is not None:
+        payload["owner_id"] = str(owner_id)
 
     def _insert() -> dict[str, Any]:
         result = get_supabase().table("books").insert(payload).execute()

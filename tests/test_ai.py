@@ -6,9 +6,9 @@ from app.modules.ai import service as ai_service
 
 
 def test_generate_chapter_success():
-    # Mock internal functions
+    # validate_content is imported locally from moderation_service, so patch it there
     with patch("app.modules.ai.service._complete") as mock_complete, \
-         patch("app.modules.ai.service.validate_content") as mock_validate, \
+         patch("app.services.moderation_service.validate_content") as mock_validate, \
          patch("app.modules.ai.service._validate_summary_quality") as mock_validate_summary:
         mock_complete.side_effect = [
             "Chapter text content.",   # first call for chapter generation
@@ -33,7 +33,7 @@ def test_generate_chapter_success():
 
 def test_generate_chapter_moderation_fails():
     with patch("app.modules.ai.service._complete") as mock_complete, \
-         patch("app.modules.ai.service.validate_content") as mock_validate:
+         patch("app.services.moderation_service.validate_content") as mock_validate:
         mock_complete.return_value = "Bad content"
         mock_validate.side_effect = HTTPException(status_code=400, detail="Bad content")
         with pytest.raises(HTTPException):
@@ -54,8 +54,8 @@ def test_summarize_chapter_success():
         assert result == "This is a summary. It has two sentences. Actually three."
         mock_called = mock_complete.call_args
         assert mock_called is not None
-        # Validate prompt includes text
-        assert "Summarize the following chapter" in mock_called.kwargs["user"]
+        # _complete(system, user, ...) is called positionally; user prompt is args[1]
+        assert "Summarize the following chapter" in mock_called.args[1]
         mock_validate.assert_called_once()
 
 

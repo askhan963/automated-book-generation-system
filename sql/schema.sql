@@ -23,9 +23,16 @@ CREATE TABLE books (
     final_review_notes_status   stage_status NOT NULL DEFAULT 'pending_review',
     phase                       book_phase NOT NULL DEFAULT 'outline',
     human_notes                 TEXT,
+    owner_id        UUID,
+    genre           TEXT,
+    tone            TEXT,
+    audience        TEXT,
+    length          TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_books_owner_id ON books(owner_id);
 
 CREATE TABLE chapters (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

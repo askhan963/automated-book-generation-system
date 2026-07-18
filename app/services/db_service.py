@@ -48,7 +48,7 @@ def check_supabase_health() -> tuple[str, str | None]:
 
 # --- Books ---
 
-def create_book(title: str, initial_notes: str | None = None, genre: str | None = None, tone: str | None = None, audience: str | None = None, length: str | None = None) -> dict[str, Any]:
+def create_book(title: str, initial_notes: str | None = None, genre: str | None = None, tone: str | None = None, audience: str | None = None, length: str | None = None, owner_id: UUID | None = None) -> dict[str, Any]:
     payload = {
         "title": title,
         "initial_notes": initial_notes,
@@ -60,6 +60,8 @@ def create_book(title: str, initial_notes: str | None = None, genre: str | None 
         "audience": audience,
         "length": length,
     }
+    if owner_id is not None:
+        payload["owner_id"] = str(owner_id)
 
     def _insert() -> dict[str, Any]:
         result = get_supabase().table("books").insert(payload).execute()
@@ -68,15 +70,12 @@ def create_book(title: str, initial_notes: str | None = None, genre: str | None 
     return _run(_insert)
 
 
-def list_books() -> list[dict[str, Any]]:
+def list_books(owner_id: UUID | None = None) -> list[dict[str, Any]]:
     def _fetch() -> list[dict[str, Any]]:
-        result = (
-            get_supabase()
-            .table("books")
-            .select("*")
-            .order("created_at", desc=True)
-            .execute()
-        )
+        query = get_supabase().table("books").select("*")
+        if owner_id is not None:
+            query = query.eq("owner_id", str(owner_id))
+        result = query.order("created_at", desc=True).execute()
         return result.data or []
 
     return _run(_fetch)
@@ -120,6 +119,7 @@ def create_book_with_outline(
     tone: str | None = None,
     audience: str | None = None,
     length: str | None = None,
+    owner_id: UUID | None = None,
 ) -> dict[str, Any]:
     payload = {
         "title": title,
@@ -133,6 +133,8 @@ def create_book_with_outline(
         "audience": audience,
         "length": length,
     }
+    if owner_id is not None:
+        payload["owner_id"] = str(owner_id)
 
     def _insert() -> dict[str, Any]:
         result = get_supabase().table("books").insert(payload).execute()

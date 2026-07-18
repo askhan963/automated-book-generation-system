@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 from uuid import UUID, uuid4
 from datetime import datetime
 
+from app.modules.projects import service as proj_service
 from app.modules.projects.service import (
     create_project,
     get_project,
@@ -91,7 +92,7 @@ def test_get_project_found():
         assert result["id"] == str(project_id)
         assert result["name"] == "Test Project"
         mock_table.select.assert_called_once_with("*")
-        mock_eq.eq.assert_called_once_with("id", str(project_id))
+        mock_select.eq.assert_called_once_with("id", str(project_id))
 
 
 def test_get_project_not_found():
@@ -136,7 +137,7 @@ def test_list_projects_by_user():
         assert len(result) == 2
         assert all(p["owner_id"] == str(user_id) for p in result)
         mock_table.select.assert_called_once_with("*")
-        mock_eq.eq.assert_called_once_with("owner_id", str(user_id))
+        mock_select.eq.assert_called_once_with("owner_id", str(user_id))
 
 
 def test_update_project():
@@ -170,7 +171,7 @@ def test_update_project():
         assert payload["name"] == "New Name"
         assert payload["description"] == "New Description"
         assert "updated_at" in payload
-        mock_eq.eq.assert_called_once_with("id", str(project_id))
+        mock_update.eq.assert_called_once_with("id", str(project_id))
 
 
 def test_delete_project():
@@ -192,7 +193,7 @@ def test_delete_project():
         proj_service.delete_project(project_id)
 
         mock_table.delete.assert_called_once()
-        mock_eq.eq.assert_called_once_with("id", str(project_id))
+        mock_delete.eq.assert_called_once_with("id", str(project_id))
 
 
 def test_create_api_key():
